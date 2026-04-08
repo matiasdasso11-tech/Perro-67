@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FPS Juego</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;font-family:Arial,sans-serif;background:#111}
+#menu,#shop,#inventory,#pause,#multiplayerPanel{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,0,0.92);color:#fff;z-index:20}
+#menu h1{font-size:48px;margin-bottom:30px;letter-spacing:2px;color:#e0e0e0}
+#ui{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-start;color:#fff;font-size:16px;z-index:15;pointer-events:none}
+#leftHud,#rightHud{display:flex;flex-direction:column;gap:6px;background:rgba(0,0,0,0.45);padding:10px 14px;border-radius:8px;max-width:48%}
+#rightHud{align-items:flex-end;text-align:right}
+#comboText{position:absolute;top:90px;left:50%;transform:translateX(-50%);font-size:30px;font-weight:bold;color:#ffe54c;z-index:15;pointer-events:none;text-align:center;text-shadow:0 2px 8px #000}
+#modeText{position:absolute;top:130px;left:50%;transform:translateX(-50%);font-size:16px;color:#ccc;z-index:15;pointer-events:none;text-align:center;background:rgba(0,0,0,0.4);padding:4px 12px;border-radius:20px}
+#roomCode{position:absolute;bottom:14px;left:14px;font-size:14px;color:#aaa;z-index:15;pointer-events:none}
+#hitMarker{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:16;pointer-events:none;opacity:0;transition:opacity 0.1s}
+#enemyLayer{position:absolute;inset:0;pointer-events:none;z-index:5}
+.enemySprite{position:absolute;width:80px;height:80px;transform:translate(-50%,-50%);object-fit:contain;transition:transform 0.1s;cursor:crosshair}
+button{margin:8px;padding:12px 28px;font-size:17px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:6px;cursor:pointer;transition:background 0.2s}
+button:hover{background:#2a2a4e}
+input{margin:10px;padding:10px 16px;font-size:17px;color:#000;border-radius:6px;border:1px solid #666}
+canvas{display:block;position:absolute;inset:0;z-index:1;cursor:none}
+.hidden{display:none !important}
+.badge{padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.15);display:inline-block;font-size:13px}
+.small{font-size:13px;opacity:0.8}
+#deathMsg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:bold;color:#ff4444;z-index:20;pointer-events:none;opacity:0;text-shadow:0 2px 12px #000;transition:opacity 0.3s}
+#crosshair{position:absolute;pointer-events:none;z-index:16;transform:translate(-50%,-50%)}
+</style>
+</head>
+<body>
+
+<!-- MENÚ PRINCIPAL -->
+<div id="menu">
+  <h1>⚡ FPS JUEGO</h1>
+  <button onclick="startGame()">🎮 Empezar</button>
+  <button onclick="openMultiplayerPanel()">🌐 Multijugador</button>
+  <button onclick="openShop()">🛒 Tienda</button>
+  <p style="margin-top:20px;color:#666;font-size:14px">Monedas guardadas: <span id="menuCoins">0</span> 💰</p>
+</div>
+
+<!-- MULTIJUGADOR -->
+<div id="multiplayerPanel" class="hidden">
+  <h1>🌐 Multijugador</h1>
+  <button onclick="createRoom()">➕ Crear sala</button>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0">
+    <input id="joinCodeInput" maxlength="8" placeholder="Código de sala">
+    <button onclick="joinRoom()">Unirse</button>
+  </div>
+  <p style="color:#888;font-size:13px">El multijugador funciona entre pestañas del mismo navegador</p>
+  <button onclick="closeMultiplayerPanel()">← Volver</button>
+</div>
+
+<!-- TIENDA -->
+<div id="shop" class="hidden">
+  <h1>🛒 Tienda</h1>
+  <div id="coinsText" style="font-size:22px;margin-bottom:10px">💰 Monedas: 0</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+    <button onclick="buyWeapon('ak')">🔫 AK-47 (100)</button>
+    <button onclick="buyWeapon('bazuca')">💥 Bazuca (300)</button>
+    <button onclick="buyWeapon('granada')">💣 Granada (150)</button>
+    <button onclick="buyPurpura()">🟣 Púrpura (1000)</button>
+    <button onclick="buyInvert()">🔄 Inversión (1000)</button>
+    <button onclick="buyInvertScreen()">📺 Inv. pantalla (1000)</button>
+    <button onclick="buyEscudo()" style="grid-column:span 2">🛡️ Escudo de Combo x3 (700)</button>
+  </div>
+  <button onclick="openInventory()" style="margin-top:16px">📦 Inventario</button>
+  <button onclick="closeShop()">← Volver</button>
+</div>
+
+<!-- INVENTARIO -->
+<div id="inventory" class="hidden">
+  <h1>📦 Inventario</h1>
+  <div id="invList" style="display:flex;flex-direction:column;align-items:center"></div>
+  <button onclick="closeInventory()">← Volver</button>
+</div>
+
+<!-- PAUSA -->
+<div id="pause" class="hidden">
+  <h1>⏸ Pausa</h1>
+  <button onclick="resumeGame()">▶ Reanudar</button>
+  <button onclick="goToMenu()">🏠 Menú</button>
+</div>
+
+<!-- PANEL DEV -->
+<div id="devPanel" class="hidden" style="background:rgba(0,0,0,0.97);border:1px solid #333">
+  <div style="text-align:center;margin-bottom:18px">
+    <span style="font-size:11px;letter-spacing:4px;color:#555;text-transform:uppercase">— acceso desarrollador —</span>
+    <h2 style="margin:6px 0 0;font-size:26px;color:#00ff88">⌨️ Consola de comandos</h2>
+  </div>
+  <div id="devLog" style="width:420px;max-width:90vw;height:160px;overflow-y:auto;background:#0a0a0a;border:1px solid #222;border-radius:6px;padding:10px;font-family:monospace;font-size:13px;color:#00ff88;margin-bottom:14px"></div>
+  <div style="display:flex;gap:8px;width:420px;max-width:90vw">
+    <input id="devInput" placeholder="Escribí un comando..." style="flex:1;background:#111;color:#00ff88;border:1px solid #333;font-family:monospace;font-size:15px;border-radius:6px;padding:10px 14px;margin:0" onkeydown="if(event.key==='Enter')runDevCommand()">
+    <button onclick="runDevCommand()" style="padding:10px 18px;background:#003322;border-color:#00ff88;color:#00ff88;margin:0">▶ OK</button>
+  </div>
+  <div style="margin-top:16px;color:#444;font-size:12px;font-family:monospace;text-align:left;width:420px;max-width:90vw;line-height:1.8">
+    /kills &lt;n&gt; — otorgar kills<br>
+    /monedas &lt;n&gt; — otorgar monedas<br>
+    /purpura &lt;n&gt; — otorgar cargas púrpura<br>
+    /reset — resetear todo el progreso
+  </div>
+  <button onclick="closeDevPanel()" style="margin-top:20px;background:#1a0000;border-color:#550000;color:#ff6666">✕ Cerrar</button>
+</div>
+
+<!-- HUD EN JUEGO -->
+<div id="ui" class="hidden">
+  <div id="leftHud">
+    <div id="kills">💀 Total: 0</div>
+    <div id="sessionKills">🎯 Partida: 0</div>
+    <div id="timeText">⏱ 0s</div>
+    <div id="weaponText">🔫 Pistola</div>
+  </div>
+  <div id="rightHud">
+    <div>💰 <span id="coins">0</span></div>
+    <div>🏆 <span id="rank">Bronce</span></div>
+    <div id="rivalStatus" class="badge">Rival: desconectado</div>
+    <div id="enemyKillsWrap" class="hidden small">Rival kills: <span id="enemyKills">0</span></div>
+    <div class="small">1: normal · 2: púrpura · ESC: pausa</div>
+    <button onclick="pauseGame()" style="pointer-events:auto;margin-top:4px;padding:6px 14px;font-size:14px">⏸</button>
+  </div>
+</div>
+
+<div id="comboText"></div>
+<div id="modeText">Modo: Normal</div>
+<div id="roomCode">Sala: -</div>
+<div id="deathMsg">-50 💸</div>
+
+<!-- Crosshair SVG personalizado -->
+<div id="crosshair">
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <line x1="14" y1="2" x2="14" y2="10" stroke="white" stroke-width="2"/>
+    <line x1="14" y1="18" x2="14" y2="26" stroke="white" stroke-width="2"/>
+    <line x1="2" y1="14" x2="10" y2="14" stroke="white" stroke-width="2"/>
+    <line x1="18" y1="14" x2="26" y2="14" stroke="white" stroke-width="2"/>
+    <circle cx="14" cy="14" r="2.5" fill="none" stroke="white" stroke-width="1.5"/>
+  </svg>
+</div>
+
+<div id="enemyLayer"></div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const crosshairEl = document.getElementById('crosshair');
+const enemyLayer = document.getElementById('enemyLayer');
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// Posiciones de enemigos adaptables al canvas
+function getSpots() {
+  const w = canvas.width, h = canvas.height;
+  return [
+    {x: w*0.25, y: h*0.6},
+    {x: w*0.30, y: h*0.48},
+    {x: w*0.42, y: h*0.55},
+    {x: w*0.57, y: h*0.38},
+    {x: w*0.72, y: h*0.32},
+    {x: w*0.76, y: h*0.50},
+    {x: w*0.88, y: h*0.44},
+    {x: w*0.85, y: h*0.60},
+    {x: w*0.65, y: h*0.65},
+  ];
+}
+
+const dogGifSrc = 'https://media1.tenor.com/m/Y-Ve__KPgU0AAAAd/67-meme.gif';
+const dogFallbackSrc = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">' +
+  '<circle cx="40" cy="44" r="22" fill="#9a9a9a"/>' +
+  '<rect x="26" y="50" width="28" height="10" rx="3" fill="#666"/>' +
+  '<rect x="20" y="18" width="12" height="17" rx="4" fill="#777"/>' +
+  '<rect x="48" y="18" width="12" height="17" rx="4" fill="#777"/>' +
+  '<circle cx="33" cy="38" r="3" fill="#333"/>' +
+  '<circle cx="47" cy="38" r="3" fill="#333"/>' +
+  '</svg>'
+);
+
+let gameRunning = false, paused = false, multiplayer = false;
+let currentRoomCode = '', roomChannel = null, presenceTimer = null;
+let roomTimer = 0, gameStartTime = 0;
+let hasPeer = false, lastPeerSeenAt = 0;
+let currentWeapon = localStorage.getItem('weapon') || 'pistola';
+let ownedWeapons = JSON.parse(localStorage.getItem('owned') || '{"pistola":true}');
+let ownedItems = JSON.parse(localStorage.getItem('items') || '{}');
+let purpuraCharges = parseInt(localStorage.getItem('purpuraCharges') || '0', 10);
+let purpuraBuys = parseInt(localStorage.getItem('purpuraBuys') || '0', 10);
+let purpuraEquipped = localStorage.getItem('purpuraEquipped') === 'true';
+let escudoCharges = parseInt(localStorage.getItem('escudoCharges') || '0', 10);
+let selectedMode = 'normal';
+let invert = localStorage.getItem('invert') === 'true';
+let invertScreen = localStorage.getItem('invertScreen') === 'true';
+let kills = parseInt(localStorage.getItem('kills') || '0', 10);
+let coins = parseInt(localStorage.getItem('coins') || '0', 10);
+let combo = 0, sessionKills = 0;
+let aimX = canvas.width / 2, aimY = canvas.height / 2;
+let remoteAim = {x: 0, y: 0, kills: 0, sessionKills: 0, seen: false};
+let specialActiveUntil = 0, specialCooldownUntil = 0;
+let enemies = [];
+let loopStarted = false;
+
+function initEnemies() {
+  const spots = getSpots();
+  enemies = spots.map((s, i) => ({spot: i, x: s.x, y: s.y, alive: false, red: false, spawnAt: 0, el: null}));
+}
+initEnemies();
+
+function safeStore() {
+  localStorage.setItem('kills', String(kills));
+  localStorage.setItem('coins', String(coins));
+  localStorage.setItem('weapon', currentWeapon);
+  localStorage.setItem('owned', JSON.stringify(ownedWeapons));
+  localStorage.setItem('items', JSON.stringify(ownedItems));
+  localStorage.setItem('purpuraCharges', String(purpuraCharges));
+  localStorage.setItem('purpuraBuys', String(purpuraBuys));
+  localStorage.setItem('purpuraEquipped', String(purpuraEquipped));
+  localStorage.setItem('escudoCharges', String(escudoCharges));
+  localStorage.setItem('invert', String(invert));
+  localStorage.setItem('invertScreen', String(invertScreen));
+}
+
+function hidePanels() {
+  ['menu','multiplayerPanel','shop','inventory','pause','devPanel'].forEach(id =>
+    document.getElementById(id).classList.add('hidden')
+  );
+}
+
+function openDevPanel() {
+  const wasInGame = gameRunning && !paused;
+  if (wasInGame) paused = true;
+  document.getElementById('devPanel').classList.remove('hidden');
+  setTimeout(() => document.getElementById('devInput').focus(), 50);
+  devLog('🟢 Consola iniciada. Bienvenido, dev.');
+}
+
+function closeDevPanel() {
+  document.getElementById('devPanel').classList.add('hidden');
+  if (gameRunning) paused = false;
+}
+
+function devLog(msg) {
+  const log = document.getElementById('devLog');
+  const line = document.createElement('div');
+  line.textContent = '> ' + msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function runDevCommand() {
+  const input = document.getElementById('devInput');
+  const raw = input.value.trim();
+  input.value = '';
+  if (!raw) return;
+  devLog(raw);
+
+  const parts = raw.split(' ');
+  const cmd = parts[0].toLowerCase();
+  const arg = parseInt(parts[1], 10);
+
+  if (cmd === '/kills') {
+    if (isNaN(arg) || arg < 0) { devLog('❌ Usá: /kills <número>'); return; }
+    kills += arg;
+    safeStore(); updateHUD();
+    devLog('✅ +' + arg + ' kills otorgadas. Total: ' + kills);
+
+  } else if (cmd === '/monedas') {
+    if (isNaN(arg) || arg < 0) { devLog('❌ Usá: /monedas <número>'); return; }
+    coins += arg;
+    safeStore(); updateCoins();
+    devLog('✅ +' + arg + ' monedas otorgadas. Total: ' + coins);
+
+  } else if (cmd === '/purpura') {
+    if (isNaN(arg) || arg < 0) { devLog('❌ Usá: /purpura <número>'); return; }
+    purpuraCharges = Math.min(16, purpuraCharges + arg);
+    purpuraEquipped = true;
+    ownedItems.purpura = true;
+    safeStore(); updateModeUI(); renderInventory();
+    devLog('✅ Cargas púrpura: ' + purpuraCharges + '/16');
+
+  } else if (cmd === '/reset') {
+    kills = 0; coins = 0; combo = 0; sessionKills = 0;
+    purpuraCharges = 0; purpuraEquipped = false; purpuraBuys = 0;
+    ownedWeapons = {pistola: true}; ownedItems = {};
+    currentWeapon = 'pistola'; invert = false; invertScreen = false;
+    safeStore(); updateCoins(); updateModeUI(); renderInventory();
+    devLog('⚠️ Progreso reseteado completamente.');
+
+  } else {
+    devLog('❌ Comando desconocido: ' + cmd);
+  }
+}
+
+function openMultiplayerPanel() { hidePanels(); document.getElementById('multiplayerPanel').classList.remove('hidden'); }
+function closeMultiplayerPanel() { document.getElementById('multiplayerPanel').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden'); }
+function openShop() { hidePanels(); document.getElementById('shop').classList.remove('hidden'); updateCoins(); updateShopPrices(); renderInventory(); }
+function closeShop() { document.getElementById('shop').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden'); }
+function openInventory() { document.getElementById('shop').classList.add('hidden'); document.getElementById('inventory').classList.remove('hidden'); renderInventory(); }
+function closeInventory() { document.getElementById('inventory').classList.add('hidden'); document.getElementById('shop').classList.remove('hidden'); }
+
+function generateRoomCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
+function getClientId() {
+  let id = localStorage.getItem('clientId');
+  if (!id) { id = Math.random().toString(36).slice(2, 10); localStorage.setItem('clientId', id); }
+  return id;
+}
+
+function createRoom() { currentRoomCode = generateRoomCode(); startMultiplayerGame(); }
+function joinRoom() {
+  const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+  if (!code) return;
+  currentRoomCode = code;
+  startMultiplayerGame();
+}
+
+function setupRoomChannel(code) {
+  if (roomChannel) { try { roomChannel.postMessage({type:'bye', id:getClientId()}); } catch(e) {} roomChannel.close(); }
+  roomChannel = new BroadcastChannel('fps_room_' + code);
+  roomChannel.onmessage = e => {
+    const d = e.data || {};
+    if (d.id === getClientId()) return;
+    if (d.type === 'hello' || d.type === 'state') {
+      hasPeer = true; lastPeerSeenAt = Date.now();
+      document.getElementById('rivalStatus').textContent = 'Rival: conectado';
+    }
+    if (d.type === 'state') {
+      remoteAim.x = d.x || 0; remoteAim.y = d.y || 0;
+      remoteAim.kills = d.kills || 0; remoteAim.sessionKills = d.sessionKills || 0;
+      remoteAim.seen = true;
+    }
+    if (d.type === 'bye') hasPeer = false;
+  };
+}
+
+function closeRoomChannel() {
+  if (roomChannel) { try { roomChannel.postMessage({type:'bye', id:getClientId()}); } catch(e) {} roomChannel.close(); roomChannel = null; }
+}
+
+function startGame() {
+  multiplayer = false; currentRoomCode = '';
+  closeRoomChannel(); clearInterval(presenceTimer); presenceTimer = null;
+  hidePanels();
+  document.getElementById('ui').classList.remove('hidden');
+  document.getElementById('enemyKillsWrap').classList.add('hidden');
+  document.getElementById('roomCode').textContent = 'Sala: -';
+  gameRunning = true; paused = false;
+  gameStartTime = Date.now(); roomTimer = 0;
+  combo = 0; sessionKills = 0; hasPeer = false; selectedMode = 'normal';
+  initEnemies();
+  spawnNormalEnemy();
+  updateModeUI();
+  if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
+}
+
+function startMultiplayerGame() {
+  multiplayer = true; hidePanels();
+  document.getElementById('ui').classList.remove('hidden');
+  document.getElementById('enemyKillsWrap').classList.remove('hidden');
+  document.getElementById('roomCode').textContent = 'Sala: ' + currentRoomCode;
+  document.getElementById('rivalStatus').textContent = 'Rival: conectando...';
+  setupRoomChannel(currentRoomCode);
+  gameRunning = true; paused = false;
+  gameStartTime = Date.now(); roomTimer = 0;
+  combo = 0; sessionKills = 0; hasPeer = false; selectedMode = 'normal';
+  initEnemies();
+  spawnNormalEnemy();
+  clearInterval(presenceTimer);
+  presenceTimer = setInterval(() => { if (multiplayer && roomChannel) roomChannel.postMessage({type:'hello', id:getClientId()}); }, 1000);
+  if (roomChannel) roomChannel.postMessage({type:'hello', id:getClientId()});
+  updateModeUI();
+  if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
+}
+
+function updateCoins() {
+  const ct = document.getElementById('coinsText'), c = document.getElementById('coins');
+  const mc = document.getElementById('menuCoins');
+  if (ct) ct.textContent = '💰 Monedas: ' + coins;
+  if (c) c.textContent = coins;
+  if (mc) mc.textContent = coins;
+  safeStore();
+}
+
+function updateModeUI() {
+  const mt = document.getElementById('modeText');
+  if (!mt) return;
+  const modeLabel = selectedMode === 'purpura' ? '🟣 Modo Púrpura' : '⚪ Modo Normal';
+  const usesLabel = purpuraEquipped ? ` | Usos: ${purpuraCharges}/16` : '';
+  const cd = selectedMode === 'purpura' && Date.now() < specialCooldownUntil
+    ? ` | CD: ${Math.ceil((specialCooldownUntil - Date.now()) / 1000)}s` : '';
+  mt.textContent = modeLabel + usesLabel + cd;
+}
+
+function renderInventory() {
+  const div = document.getElementById('invList');
+  if (!div) return;
+  div.innerHTML = '';
+
+  for (const w in ownedWeapons) {
+    if (ownedWeapons[w]) {
+      const b = document.createElement('button');
+      b.textContent = (currentWeapon === w ? '✅ Equipado: ' : 'Equipar ') + w.toUpperCase();
+      b.style.background = currentWeapon === w ? '#1a3a1a' : '';
+      b.onclick = () => { currentWeapon = w; safeStore(); renderInventory(); };
+      div.appendChild(b);
+    }
+  }
+
+  if (ownedItems.invert) {
+    const b = document.createElement('button');
+    b.textContent = invert ? '✅ Inversión activada' : 'Equipar inversión';
+    b.onclick = () => { invert = !invert; safeStore(); renderInventory(); };
+    div.appendChild(b);
+  }
+
+  if (ownedItems.invertScreen) {
+    const b = document.createElement('button');
+    b.textContent = invertScreen ? '✅ Pantalla invertida' : 'Equipar pantalla invertida';
+    b.onclick = () => { invertScreen = !invertScreen; safeStore(); renderInventory(); };
+    div.appendChild(b);
+  }
+
+  const p = document.createElement('button');
+  p.textContent = (purpuraEquipped ? '✅ Desequipar ' : 'Equipar ') + `Púrpura (${purpuraCharges}/16)`;
+  p.onclick = () => {
+    if (purpuraCharges <= 0) return;
+    purpuraEquipped = !purpuraEquipped;
+    if (!purpuraEquipped && selectedMode === 'purpura') selectedMode = 'normal';
+    safeStore(); updateModeUI(); renderInventory();
+  };
+  p.disabled = purpuraCharges <= 0;
+  div.appendChild(p);
+
+  const s = document.createElement('button');
+  s.textContent = escudoCharges > 0 ? `🛡️ Escudo de Combo — ${escudoCharges} carga${escudoCharges !== 1 ? 's' : ''}` : '🛡️ Escudo de Combo — sin cargas';
+  s.style.background = escudoCharges > 0 ? '#1a2a3a' : '';
+  s.style.color = escudoCharges > 0 ? '#88ccff' : '#555';
+  s.disabled = true;
+  div.appendChild(s);
+}
+
+function updateShopPrices() {
+  const precio = purpuraBuys >= 5 ? 2000 : 1000;
+  const restante = Math.max(0, 5 - purpuraBuys);
+  const btn = document.querySelector('#shop button[onclick="buyPurpura()"]');
+  if (btn) {
+    btn.textContent = restante > 0
+      ? `🟣 Púrpura (${precio}) — sube a 2000 en ${restante} compra${restante !== 1 ? 's' : ''}`
+      : `🟣 Púrpura (${precio})`;
+  }
+}
+
+function buyWeapon(w) {
+  const prices = {ak: 100, bazuca: 300, granada: 150};
+  if (ownedWeapons[w]) { alert('Ya tenés esta arma.'); return; }
+  if (coins >= prices[w]) { coins -= prices[w]; ownedWeapons[w] = true; safeStore(); updateCoins(); renderInventory(); }
+  else { alert('No tenés suficientes monedas.'); }
+}
+
+function buyPurpura() {
+  const precio = purpuraBuys >= 5 ? 2000 : 1000;
+  if (coins < precio) { alert('No tenés suficientes monedas. Precio actual: ' + precio); return; }
+  if (purpuraCharges >= 16) { alert('Ya tenés el máximo de cargas.'); return; }
+  coins -= precio; purpuraCharges++; purpuraBuys++; ownedItems.purpura = true; purpuraEquipped = true;
+  safeStore(); updateCoins(); updateModeUI(); renderInventory();
+}
+
+function buyInvert() {
+  if (ownedItems.invert) { alert('Ya lo tenés.'); return; }
+  if (coins >= 1000) { coins -= 1000; ownedItems.invert = true; safeStore(); updateCoins(); renderInventory(); }
+  else { alert('No tenés suficientes monedas.'); }
+}
+
+function buyInvertScreen() {
+  if (ownedItems.invertScreen) { alert('Ya lo tenés.'); return; }
+  if (coins >= 1000) { coins -= 1000; ownedItems.invertScreen = true; safeStore(); updateCoins(); renderInventory(); }
+  else { alert('No tenés suficientes monedas.'); }
+}
+
+function buyEscudo() {
+  if (coins < 700) { alert('No tenés suficientes monedas. Necesitás 700.'); return; }
+  coins -= 700;
+  escudoCharges += 3;
+  safeStore(); updateCoins(); renderInventory();
+  alert('🛡️ ¡Escudo de Combo comprado! Tenés ' + escudoCharges + ' cargas.');
+}
+
+function pauseGame() { paused = true; document.getElementById('pause').classList.remove('hidden'); }
+function resumeGame() { paused = false; document.getElementById('pause').classList.add('hidden'); }
+function goToMenu() {
+  gameRunning = false; paused = false;
+  clearInterval(presenceTimer); presenceTimer = null;
+  closeRoomChannel();
+  enemies.forEach(e => { if (e.el) e.el.style.display = 'none'; });
+  document.getElementById('pause').classList.add('hidden');
+  document.getElementById('ui').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('roomCode').textContent = 'Sala: -';
+  document.getElementById('menuCoins').textContent = coins;
+}
+
+function clearEnemies() {
+  enemies.forEach(e => { e.alive = false; e.red = false; e.golden = false; e.spawnAt = 0; });
+}
+
+function spawnEnemyAt(index, red, golden = false) {
+  const spots = getSpots();
+  const e = enemies[index];
+  e.x = spots[index].x; e.y = spots[index].y;
+  e.red = !!red; e.golden = !!golden; e.alive = true; e.spawnAt = Date.now();
+  return e;
+}
+
+function spawnNormalEnemy() {
+  clearEnemies();
+  const free = enemies.filter(e => !e.alive);
+  if (free.length === 0) return;
+
+  // 5% de probabilidad de perro dorado — aparece solo
+  if (Math.random() < 0.005) {
+    const pick = free[Math.floor(Math.random() * free.length)];
+    spawnEnemyAt(pick.spot, false, true);
+    return;
+  }
+
+  const normalPick = free[Math.floor(Math.random() * free.length)];
+  spawnEnemyAt(normalPick.spot, false);
+  if (Math.random() < 0.4) {
+    const remaining = enemies.filter(e => !e.alive && e.spot !== normalPick.spot);
+    if (remaining.length) {
+      const redPick = remaining[Math.floor(Math.random() * remaining.length)];
+      spawnEnemyAt(redPick.spot, true);
+    }
+  }
+}
+
+function drawRoom() {
+  const w = canvas.width, h = canvas.height;
+  // Fondo sala
+  ctx.fillStyle = '#d4c9b0'; ctx.fillRect(0, 0, w, h * 0.55);
+  ctx.fillStyle = '#8b6f47'; ctx.fillRect(0, h * 0.55, w, h * 0.45);
+  // Pared de fondo con textura
+  ctx.fillStyle = '#c8bda4'; ctx.fillRect(0, 0, w, h * 0.52);
+  // Sombra de suelo
+  const grad = ctx.createLinearGradient(0, h*0.5, 0, h*0.6);
+  grad.addColorStop(0, 'rgba(0,0,0,0.3)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(0, h*0.5, w, h*0.1);
+
+  // Mesa izquierda
+  ctx.fillStyle = '#7a5230'; ctx.fillRect(w*0.18, h*0.45, w*0.15, h*0.1);
+  ctx.fillStyle = '#5c3e22';
+  ctx.fillRect(w*0.19, h*0.55, w*0.018, h*0.08);
+  ctx.fillRect(w*0.31, h*0.55, w*0.018, h*0.08);
+
+  // Estante con libros de colores
+  ctx.fillStyle = '#6b4226'; ctx.fillRect(w*0.48, h*0.22, w*0.1, h*0.32);
+  const bookColors = ['#c0392b','#27ae60','#2980b9','#f39c12','#8e44ad','#e74c3c','#16a085'];
+  for (let i = 0; i < 7; i++) {
+    ctx.fillStyle = bookColors[i];
+    ctx.fillRect(w*0.485 + i*(w*0.013), h*0.26, w*0.011, h*0.07);
+    ctx.fillRect(w*0.485 + i*(w*0.013), h*0.35, w*0.011, h*0.07);
+    ctx.fillRect(w*0.485 + i*(w*0.013), h*0.44, w*0.011, h*0.06);
+  }
+
+  // Ventana
+  ctx.fillStyle = '#87ceeb'; ctx.fillRect(w*0.70, h*0.12, w*0.15, h*0.18);
+  ctx.strokeStyle = '#8a7560'; ctx.lineWidth = 4;
+  ctx.strokeRect(w*0.70, h*0.12, w*0.15, h*0.18);
+  ctx.strokeStyle = '#8a7560'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(w*0.775, h*0.12); ctx.lineTo(w*0.775, h*0.30); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w*0.70, h*0.21); ctx.lineTo(w*0.85, h*0.21); ctx.stroke();
+  // Luz de ventana
+  const lightGrad = ctx.createRadialGradient(w*0.775, h*0.35, 0, w*0.775, h*0.35, w*0.15);
+  lightGrad.addColorStop(0, 'rgba(255,255,200,0.18)'); lightGrad.addColorStop(1, 'rgba(255,255,200,0)');
+  ctx.fillStyle = lightGrad; ctx.fillRect(w*0.65, h*0.28, w*0.25, h*0.35);
+
+  // Caja/barricada derecha
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(w*0.86, h*0.38, w*0.12, h*0.12);
+  ctx.fillStyle = '#922b21'; ctx.fillRect(w*0.86, h*0.38, w*0.12, h*0.025);
+  ctx.strokeStyle = '#7b241c'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(w*0.86, h*0.395); ctx.lineTo(w*0.98, h*0.395); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w*0.92, h*0.38); ctx.lineTo(w*0.92, h*0.50); ctx.stroke();
+}
+
+let shootAnim = 0; // 0 = en reposo, >0 = animando disparo
+
+function drawWeapon() {
+  const bX = canvas.width / 2;
+  const bY = canvas.height - 90;
+  const recoil = shootAnim > 0 ? Math.sin(shootAnim * Math.PI) * 14 : 0;
+  const Y = bY + recoil;
+  if (shootAnim > 0) shootAnim = Math.max(0, shootAnim - 0.12);
+
+  ctx.save();
+
+  // ── PÚRPURA ──────────────────────────────────────────────
+  if (selectedMode === 'purpura') {
+    // Orbe exterior pulsante
+    ctx.shadowColor = '#b44aff'; ctx.shadowBlur = 30 + recoil * 2;
+    ctx.fillStyle = '#5a0fa8';
+    ctx.beginPath(); ctx.arc(bX, Y + 10, 38, 0, Math.PI * 2); ctx.fill();
+    // Orbe interior brillante
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#9b30e8';
+    ctx.beginPath(); ctx.arc(bX, Y + 10, 28, 0, Math.PI * 2); ctx.fill();
+    // Núcleo
+    ctx.fillStyle = '#ddb0ff';
+    ctx.beginPath(); ctx.arc(bX - 6, Y + 2, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(bX - 9, Y - 1, 4, 0, Math.PI * 2); ctx.fill();
+    // Destellos
+    ctx.strokeStyle = '#cc88ff'; ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2 + shootAnim;
+      const r1 = 30, r2 = 42;
+      ctx.beginPath();
+      ctx.moveTo(bX + Math.cos(ang)*r1, Y+10 + Math.sin(ang)*r1);
+      ctx.lineTo(bX + Math.cos(ang)*r2, Y+10 + Math.sin(ang)*r2);
+      ctx.stroke();
+    }
+    // Flash de disparo
+    if (recoil > 4) {
+      ctx.fillStyle = 'rgba(180,74,255,0.35)';
+      ctx.beginPath(); ctx.arc(bX, Y + 10, 55, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore(); return;
+  }
+
+  // ── BAZUCA ───────────────────────────────────────────────
+  if (currentWeapon === 'bazuca') {
+    // Mano derecha
+    ctx.fillStyle = '#c8a07a';
+    ctx.beginPath(); ctx.ellipse(bX + 20, Y + 38, 18, 13, -0.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#b08060';
+    ctx.fillRect(bX + 10, Y + 32, 20, 10);
+
+    // Cuerpo principal del tubo
+    ctx.fillStyle = '#3a3a3a';
+    ctx.beginPath();
+    ctx.roundRect(bX - 90, Y - 8, 170, 22, 10);
+    ctx.fill();
+    // Detalles metálicos del tubo
+    ctx.fillStyle = '#555';
+    ctx.fillRect(bX - 85, Y - 4, 20, 14);
+    ctx.fillRect(bX + 30, Y - 4, 12, 14);
+    ctx.fillStyle = '#666';
+    ctx.fillRect(bX - 10, Y - 2, 40, 10);
+    // Boca del cañón (círculo)
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(bX + 80, Y + 3, 13, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bX + 80, Y + 3, 13, 0, Math.PI*2); ctx.stroke();
+    // Interior del cañón
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(bX + 80, Y + 3, 7, 0, Math.PI*2); ctx.fill();
+    // Mira superior
+    ctx.fillStyle = '#888';
+    ctx.fillRect(bX, Y - 16, 5, 8);
+    ctx.fillRect(bX - 8, Y - 18, 22, 4);
+    // Agarre
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath(); ctx.roundRect(bX - 5, Y + 14, 14, 26, 4); ctx.fill();
+    // Flash de disparo
+    if (recoil > 4) {
+      ctx.fillStyle = 'rgba(255,140,0,0.6)';
+      ctx.beginPath(); ctx.arc(bX + 80, Y + 3, 22, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,220,0,0.4)';
+      ctx.beginPath(); ctx.arc(bX + 80, Y + 3, 30, 0, Math.PI*2); ctx.fill();
+    }
+
+  // ── AK-47 ────────────────────────────────────────────────
+  } else if (currentWeapon === 'ak') {
+    // Mano derecha
+    ctx.fillStyle = '#c8a07a';
+    ctx.beginPath(); ctx.ellipse(bX + 10, Y + 32, 16, 11, 0.1, 0, Math.PI*2); ctx.fill();
+
+    // Culata de madera
+    ctx.fillStyle = '#8b4513';
+    ctx.beginPath(); ctx.roundRect(bX - 80, Y - 6, 38, 18, 3); ctx.fill();
+    ctx.fillStyle = '#a0522d';
+    ctx.fillRect(bX - 78, Y - 4, 34, 7);
+
+    // Cuerpo metálico
+    ctx.fillStyle = '#1e1e1e';
+    ctx.beginPath(); ctx.roundRect(bX - 44, Y - 10, 100, 22, 4); ctx.fill();
+    // Cargador curvo (rasgo distintivo del AK)
+    ctx.fillStyle = '#2d2d2d';
+    ctx.beginPath();
+    ctx.moveTo(bX - 10, Y + 12);
+    ctx.quadraticCurveTo(bX - 5, Y + 48, bX + 8, Y + 46);
+    ctx.quadraticCurveTo(bX + 18, Y + 46, bX + 22, Y + 12);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.fillRect(bX - 6, Y + 14, 5, 26);
+    // Cañón
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bX + 56, Y - 6, 46, 12);
+    // Boca del cañón
+    ctx.fillStyle = '#111';
+    ctx.fillRect(bX + 96, Y - 8, 8, 16);
+    // Mira delantera
+    ctx.fillStyle = '#777';
+    ctx.fillRect(bX + 88, Y - 14, 3, 8);
+    // Mira trasera
+    ctx.fillStyle = '#555';
+    ctx.fillRect(bX + 10, Y - 14, 14, 5);
+    ctx.fillRect(bX + 15, Y - 16, 4, 4);
+    // Agarre de pistola
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.roundRect(bX + 26, Y + 12, 13, 24, 3); ctx.fill();
+    // Flash de disparo
+    if (recoil > 4) {
+      ctx.fillStyle = 'rgba(255,200,0,0.7)';
+      ctx.beginPath(); ctx.ellipse(bX + 104, Y + 2, 14, 9, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,150,0.5)';
+      ctx.beginPath(); ctx.ellipse(bX + 112, Y + 2, 10, 6, 0, 0, Math.PI*2); ctx.fill();
+    }
+
+  // ── GRANADA ──────────────────────────────────────────────
+  } else if (currentWeapon === 'granada') {
+    // Mano
+    ctx.fillStyle = '#c8a07a';
+    ctx.beginPath(); ctx.ellipse(bX + 8, Y + 34, 15, 12, 0.1, 0, Math.PI*2); ctx.fill();
+
+    // Cuerpo de la granada
+    ctx.fillStyle = '#2d5a1b';
+    ctx.beginPath(); ctx.arc(bX, Y + 12, 26, 0, Math.PI*2); ctx.fill();
+    // Textura hexagonal (rayas)
+    ctx.strokeStyle = '#1a3a0f'; ctx.lineWidth = 1.5;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(bX - 22, Y + 12 + i*9); ctx.lineTo(bX + 22, Y + 12 + i*9); ctx.stroke();
+    }
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(bX + i*11, Y - 14); ctx.lineTo(bX + i*11, Y + 38); ctx.stroke();
+    }
+    // Clip circular para que las rayas no salgan del orbe
+    // Brillo
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.ellipse(bX - 8, Y + 4, 10, 7, -0.5, 0, Math.PI*2); ctx.fill();
+    // Cuello metálico
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(bX - 7, Y - 16, 14, 8);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(bX - 5, Y - 22, 10, 8);
+    // Palanca de seguridad
+    ctx.fillStyle = '#ccc';
+    ctx.fillRect(bX + 4, Y - 24, 16, 4);
+    ctx.fillRect(bX + 18, Y - 26, 4, 8);
+    // Pin
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bX + 2, Y - 24, 5, 0, Math.PI*2); ctx.stroke();
+
+  // ── PISTOLA ──────────────────────────────────────────────
+  } else {
+    // Mano derecha
+    ctx.fillStyle = '#c8a07a';
+    ctx.beginPath(); ctx.ellipse(bX + 6, Y + 40, 16, 12, 0.15, 0, Math.PI*2); ctx.fill();
+
+    // Agarre
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath(); ctx.roundRect(bX - 10, Y + 10, 22, 38, [2,2,6,6]); ctx.fill();
+    ctx.fillStyle = '#2a2a4a';
+    ctx.fillRect(bX - 7, Y + 14, 5, 28);
+    ctx.fillRect(bX - 7, Y + 20, 5, 4);
+    ctx.fillRect(bX - 7, Y + 28, 5, 4);
+    // Cuerpo principal
+    ctx.fillStyle = '#2c2c2c';
+    ctx.beginPath(); ctx.roundRect(bX - 14, Y - 22, 60, 32, 4); ctx.fill();
+    // Deslizador superior (slide)
+    ctx.fillStyle = '#383838';
+    ctx.beginPath(); ctx.roundRect(bX - 10, Y - 26, 50, 20, 3); ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.fillRect(bX + 24, Y - 24, 14, 16);
+    // Cañón
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(bX + 38, Y - 18, 26, 10);
+    // Boca del cañón
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(bX + 64, Y - 13, 6, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(bX + 64, Y - 13, 6, 0, Math.PI*2); ctx.stroke();
+    // Mira delantera
+    ctx.fillStyle = '#ff3333';
+    ctx.fillRect(bX + 56, Y - 30, 4, 6);
+    // Mira trasera
+    ctx.fillStyle = '#ff3333';
+    ctx.fillRect(bX, Y - 30, 10, 4);
+    ctx.fillRect(bX, Y - 30, 3, 7);
+    ctx.fillRect(bX + 7, Y - 30, 3, 7);
+    // Gatillo
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(bX + 8, Y + 10); ctx.quadraticCurveTo(bX + 18, Y + 22, bX + 8, Y + 28); ctx.stroke();
+    // Flash de disparo
+    if (recoil > 4) {
+      ctx.fillStyle = 'rgba(255,220,80,0.75)';
+      ctx.beginPath(); ctx.ellipse(bX + 68, Y - 13, 12, 8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,200,0.5)';
+      ctx.beginPath(); ctx.ellipse(bX + 74, Y - 13, 7, 5, 0, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function makeEnemyEl(index) {
+  let el = enemies[index].el;
+  if (!el) {
+    el = document.createElement('img');
+    el.className = 'enemySprite';
+    el.src = dogGifSrc;
+    el.onerror = () => { el.onerror = null; el.src = dogFallbackSrc; };
+    el.onclick = (e) => { e.stopPropagation(); handleEnemyClick(index); };
+    enemyLayer.appendChild(el);
+    enemies[index].el = el;
+  }
+  return el;
+}
+
+function showEnemy(index, red) {
+  const e = enemies[index], el = makeEnemyEl(index);
+  el.style.left = e.x + 'px'; el.style.top = e.y + 'px';
+  el.style.display = 'block';
+  el.style.pointerEvents = 'auto';
+  if (e.golden) {
+    el.style.filter = 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)';
+    el.style.transform = 'translate(-50%,-50%) scale(1.15)';
+  } else if (red) {
+    el.style.filter = 'hue-rotate(0deg) saturate(600%) brightness(1.1)';
+    el.style.transform = 'translate(-50%,-50%) scale(1)';
+  } else {
+    el.style.filter = 'none';
+    el.style.transform = 'translate(-50%,-50%) scale(1)';
+  }
+}
+
+function hideEnemy(index) {
+  const el = enemies[index].el;
+  if (el) { el.style.display = 'none'; el.style.pointerEvents = 'none'; }
+}
+
+function getRank(k) {
+  if (k >= 50000) return '🐾 Asesino Perruno';
+  if (k >= 210) return '💀 Asesino Serial';
+  if (k >= 150) return '🔥 Asesino';
+  if (k >= 110) return '💎 Diamante';
+  if (k >= 70)  return '🥇 Platino';
+  if (k >= 40)  return '🏅 Oro';
+  if (k >= 20)  return '🥈 Plata';
+  return '🥉 Bronce';
+}
+
+function showDamageText(text, color) {
+  const d = document.getElementById('deathMsg');
+  d.textContent = text; d.style.color = color; d.style.opacity = '1';
+  setTimeout(() => { d.style.opacity = '0'; }, 800);
+}
+
+function updateHUD() {
+  document.getElementById('kills').textContent = '💀 Total: ' + kills;
+  document.getElementById('sessionKills').textContent = '🎯 Partida: ' + sessionKills;
+  document.getElementById('timeText').textContent = '⏱ ' + roomTimer + 's';
+  document.getElementById('coins').textContent = coins;
+  document.getElementById('rank').textContent = getRank(kills);
+  document.getElementById('comboText').textContent = combo > 1 ? '🔥 Combo x' + combo + '!' : '';
+  document.getElementById('weaponText').textContent = '🔫 ' + currentWeapon.charAt(0).toUpperCase() + currentWeapon.slice(1);
+  if (multiplayer) {
+    document.getElementById('roomCode').textContent = 'Sala: ' + currentRoomCode;
+    document.getElementById('enemyKills').textContent = remoteAim.kills;
+  }
+  document.getElementById('rivalStatus').textContent = hasPeer ? '🟢 Rival: conectado' : (multiplayer ? '🟡 Rival: esperando...' : '🔴 Rival: -');
+  updateModeUI();
+}
+
+function killEnemy(index, specialKill = false) {
+  const e = enemies[index];
+  if (!e.alive) return;
+  const wasRed = e.red;
+  const wasGolden = e.golden;
+  e.alive = false; e.red = false; e.golden = false;
+  if (e.el) { e.el.style.transform = 'translate(-50%,-50%) scale(1.4)'; setTimeout(() => { if(e.el) e.el.style.transform = 'translate(-50%,-50%) scale(1)'; }, 150); }
+
+  if (wasGolden) {
+    coins += 100; kills++; sessionKills++;
+    shootAnim = 1;
+    showDamageText('🌟 +100 💰', '#ffd700');
+  } else if (wasRed) {
+    if (escudoCharges > 0) {
+      escudoCharges--;
+      safeStore(); renderInventory();
+      showDamageText('🛡️ ¡Combo protegido!', '#88ccff');
+    } else {
+      combo = 0; coins = Math.max(0, coins - 50);
+      showDamageText('-50 💸', '#ff4444');
+    }
+  } else {
+    kills++; sessionKills++; combo++;
+    coins += combo;
+    shootAnim = 1;
+    showDamageText(combo > 1 ? '+' + combo + ' 🔥' : '+1 💰', '#44ff88');
+  }
+  if (specialKill) { kills++; sessionKills++; combo++; coins += combo; shootAnim = 1; }
+  safeStore(); updateCoins();
+}
+
+function handleEnemyClick(index) {
+  if (!gameRunning || paused) return;
+  const wasRed = enemies[index].red;
+  killEnemy(index, false);
+  if (!wasRed) spawnNormalEnemy();
+}
+
+canvas.addEventListener('mousemove', e => {
+  aimX = e.clientX; aimY = e.clientY;
+  crosshairEl.style.left = aimX + 'px'; crosshairEl.style.top = aimY + 'px';
+});
+
+canvas.addEventListener('click', () => {
+  if (!gameRunning || paused) return;
+  // Búsqueda del enemigo más cercano al cursor
+  let bestIndex = -1, bestDist = 60;
+  for (let i = 0; i < enemies.length; i++) {
+    if (!enemies[i].alive) continue;
+    const d = Math.hypot(enemies[i].x - aimX, enemies[i].y - aimY);
+    if (d < bestDist) { bestDist = d; bestIndex = i; }
+  }
+  if (bestIndex !== -1) handleEnemyClick(bestIndex);
+});
+
+window.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'Y') { e.preventDefault(); openDevPanel(); return; }
+  if (e.key === '1') { selectedMode = 'normal'; updateModeUI(); }
+  if (e.key === '2' && purpuraEquipped && purpuraCharges > 0) {
+    if (Date.now() >= specialCooldownUntil) {
+      purpuraCharges--;
+      selectedMode = 'purpura';
+      specialActiveUntil = Date.now() + 1200;
+      specialCooldownUntil = Date.now() + 20000;
+      if (purpuraCharges <= 0) { purpuraEquipped = false; }
+      safeStore(); updateModeUI(); renderInventory();
+    }
+  }
+  if (e.key === 'Escape' && gameRunning) { paused ? resumeGame() : pauseGame(); }
+});
+
+function updateEnemies() {
+  const now = Date.now();
+  const specialActive = now < specialActiveUntil;
+
+  if (specialActive) {
+    // En modo púrpura: solo 1 perro visible a la vez
+    const aliveCount = enemies.filter(e => e.alive).length;
+    if (aliveCount === 0) {
+      const idx = Math.floor(Math.random() * enemies.length);
+      spawnEnemyAt(idx, false);
+    }
+    enemies.forEach((e, i) => {
+      if (e.alive) { showEnemy(i, false); killEnemy(i, true); }
+      else { hideEnemy(i); }
+    });
+    return;
+  }
+
+  let anyAlive = false;
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.alive) {
+      anyAlive = true;
+      if (now - e.spawnAt > 4500) {
+        e.alive = false; e.red = false;
+        if (escudoCharges > 0) {
+          escudoCharges--;
+          safeStore(); renderInventory();
+          showDamageText('🛡️ ¡Combo protegido!', '#88ccff');
+        } else {
+          combo = 0; safeStore();
+          showDamageText('¡Escapó!', '#ff8800');
+        }
+      } else {
+        showEnemy(i, e.red);
+      }
+    } else {
+      hideEnemy(i);
+    }
+  }
+
+  if (!anyAlive) spawnNormalEnemy();
+}
+
+function sendRoomState() {
+  if (multiplayer && roomChannel)
+    roomChannel.postMessage({type:'state', id:getClientId(), x:aimX, y:aimY, kills, sessionKills});
+}
+
+function drawSpecialOverlay() {
+  ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#8a2be2';
+  ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.restore();
+}
+
+function loop() {
+  if (gameRunning && !paused) {
+    roomTimer = Math.floor((Date.now() - gameStartTime) / 1000);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (invert) ctx.filter = 'invert(1)';
+    if (invertScreen) { ctx.translate(canvas.width, canvas.height); ctx.scale(-1, -1); }
+
+    drawRoom();
+    if (Date.now() < specialActiveUntil) drawSpecialOverlay();
+
+    updateEnemies();
+
+    if (multiplayer && remoteAim.seen) {
+      const px = Math.max(40, Math.min(canvas.width - 40, remoteAim.x));
+      const py = Math.max(40, Math.min(canvas.height - 40, remoteAim.y));
+      ctx.fillStyle = '#ff6060'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('⊕ Rival', px, py - 20);
+    }
+
+    ctx.restore();
+    updateHUD();
+
+    if (multiplayer && roomChannel) {
+      sendRoomState();
+      if (Date.now() - lastPeerSeenAt > 3000) hasPeer = false;
+    }
+
+    if (Date.now() >= specialActiveUntil && selectedMode === 'purpura') {
+      selectedMode = 'normal'; updateModeUI();
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+// Init
+document.getElementById('menuCoins').textContent = coins;
+renderInventory();
+updateCoins();
+updateModeUI();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
