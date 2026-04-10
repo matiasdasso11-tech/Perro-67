@@ -116,8 +116,8 @@ canvas{display:block;position:absolute;inset:0;z-index:1;cursor:none}
   <div style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
   <div style="position:absolute;top:18px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none">
     <div style="font-size:28px;font-weight:bold;color:#aaa;text-shadow:0 0 20px #fff;letter-spacing:3px">犬の領域</div>
-    <div style="font-size:14px;color:#ccc;margin-top:4px">Acertá 5 normales para escapar · 5 fallos y perdés</div>
-    <div id="dominioContador" style="font-size:20px;color:#fff;margin-top:6px">✅ 0/5</div>
+    <div style="font-size:13px;color:#ccc;margin-top:4px">Acertá 5 normales para escapar · 5 fallos = perdés todos los aciertos · 5 fallos totales = fin</div>
+    <div id="dominioContador" style="font-size:20px;color:#fff;margin-top:6px">✅ 0/5 · ❌ 0/5</div>
   </div>
 </div>
 
@@ -1036,6 +1036,9 @@ function killEnemy(index, specialKill = false) {
   if (e.el) { e.el.style.transform = 'translate(-50%,-50%) scale(1.4)'; setTimeout(() => { if(e.el) e.el.style.transform = 'translate(-50%,-50%) scale(1)'; }, 150); }
 
   if (wasGrey) {
+    coins += 5000;
+    safeStore(); updateCoins();
+    showDamageText('💀 +5000 💰 — Expansión Perruna', '#aaaaaa');
     activarDominio();
     return;
   } else if (wasGolden) {
@@ -1148,40 +1151,42 @@ function activarDominio() {
 
 function spawnDominioEnemigos() {
   const w = canvas.width, h = canvas.height;
-  // Limpiar enemigos del dominio anteriores
   dominioEnemigos.forEach(el => el.remove());
   dominioEnemigos = [];
 
-  // Llenar pantalla con 18 perros rojos
+  // Cantidad de rojos aumenta con los aciertos acumulados
+  const cantidadRojos = 28 + dominioNormalesAcertados * 4;
   const posiciones = [];
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < cantidadRojos; i++) {
     posiciones.push({
-      x: 60 + Math.random() * (w - 120),
-      y: 60 + Math.random() * (h * 0.75 - 60)
+      x: 55 + Math.random() * (w - 110),
+      y: 55 + Math.random() * (h * 0.82 - 55)
     });
   }
 
-  // Elegir 1 posición para el normal (o dorado si hay suerte)
   const normalIdx = Math.floor(Math.random() * posiciones.length);
-  const esDorado = Math.random() < 0.1; // 10% de que el especial sea dorado
+  const esDorado = Math.random() < 0.1;
 
   posiciones.forEach((pos, i) => {
     const el = document.createElement('img');
     el.className = 'enemySprite';
     el.src = dogGifSrc;
     el.onerror = () => { el.onerror = null; el.src = dogFallbackSrc; };
+    el.style.position = 'absolute';
     el.style.left = pos.x + 'px';
     el.style.top = pos.y + 'px';
     el.style.display = 'block';
     el.style.pointerEvents = 'auto';
     el.style.zIndex = '6';
+    el.style.transition = 'left 1.2s linear, top 1.2s linear';
 
     const esEspecial = i === normalIdx;
     if (esEspecial && esDorado) {
       el.style.filter = 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)';
-      el.style.transform = 'translate(-50%,-50%) scale(1.2)';
+      el.style.transform = 'translate(-50%,-50%) scale(1.1)';
       el.dataset.tipo = 'dorado';
     } else if (esEspecial) {
+      // El normal se camufla — mismo tamaño que los rojos, solo color diferente
       el.style.filter = 'none';
       el.style.transform = 'translate(-50%,-50%) scale(1)';
       el.dataset.tipo = 'normal';
@@ -1194,6 +1199,16 @@ function spawnDominioEnemigos() {
     el.onclick = () => clickDominioEnemigo(el);
     document.getElementById('enemyLayer').appendChild(el);
     dominioEnemigos.push(el);
+
+    // Movimiento aleatorio cada 1.5s — más rápido cuantos más aciertos
+    const velocidad = Math.max(600, 1500 - dominioNormalesAcertados * 150);
+    const moverEl = () => {
+      if (!dominioActivo || el.style.display === 'none') return;
+      el.style.left = (55 + Math.random() * (w - 110)) + 'px';
+      el.style.top  = (55 + Math.random() * (h * 0.82 - 55)) + 'px';
+      el._moverTimer = setTimeout(moverEl, velocidad + Math.random() * 400);
+    };
+    el._moverTimer = setTimeout(moverEl, velocidad + Math.random() * 400);
   });
 }
 
@@ -1201,42 +1216,49 @@ function clickDominioEnemigo(el) {
   if (!dominioActivo) return;
   const tipo = el.dataset.tipo;
   el.style.display = 'none';
+  if (el._moverTimer) clearTimeout(el._moverTimer);
 
   if (tipo === 'normal' || tipo === 'dorado') {
     dominioNormalesAcertados++;
     dominioFallosConsecutivos = 0;
-    const reward = tipo === 'dorado' ? 100 : 1;
-    coins += reward + combo;
+    const reward = tipo === 'dorado' ? 100 : 10;
+    coins += reward;
     kills++; sessionKills++; combo++;
     shootAnim = 1;
-    showDamageText(tipo === 'dorado' ? '🌟 +100 en dominio!' : `✅ ${dominioNormalesAcertados}/5`, '#44ff88');
     safeStore(); updateCoins();
     const cont = document.getElementById('dominioContador');
-    if (cont) cont.textContent = `✅ ${dominioNormalesAcertados}/5`;
+    if (cont) cont.textContent = `✅ ${dominioNormalesAcertados}/5 · ❌ ${dominioFallosConsecutivos}`;
+    showDamageText(tipo === 'dorado' ? `🌟 +100! Acierto ${dominioNormalesAcertados}/5` : `✅ Acierto ${dominioNormalesAcertados}/5`, '#44ff88');
 
     if (dominioNormalesAcertados >= 5) {
       escaparDominio();
       return;
     }
-    // Respawnear nuevo mapa del dominio
-    setTimeout(spawnDominioEnemigos, 400);
+    // Nuevo mapa — más difícil
+    setTimeout(spawnDominioEnemigos, 300);
 
   } else {
-    // Rojo — fallo
+    // Rojo — fallo: se pierden TODOS los aciertos
     dominioFallosConsecutivos++;
+    const aciertosAnteriores = dominioNormalesAcertados;
+    dominioNormalesAcertados = 0; // reset de aciertos
     combo = 0;
-    showDamageText(`❌ Fallo ${dominioFallosConsecutivos}/5`, '#ff4444');
     safeStore();
+    const cont = document.getElementById('dominioContador');
+    if (cont) cont.textContent = `✅ 0/5 · ❌ ${dominioFallosConsecutivos}/5`;
+    showDamageText(`❌ Fallo ${dominioFallosConsecutivos}/5 — perdiste ${aciertosAnteriores} acierto${aciertosAnteriores !== 1 ? 's' : ''}`, '#ff4444');
 
     if (dominioFallosConsecutivos >= 5) {
       perderDominio();
+    } else {
+      setTimeout(spawnDominioEnemigos, 300);
     }
   }
 }
 
 function escaparDominio() {
   dominioActivo = false;
-  dominioEnemigos.forEach(el => el.remove());
+  dominioEnemigos.forEach(el => { if (el._moverTimer) clearTimeout(el._moverTimer); el.remove(); });
   dominioEnemigos = [];
   const overlay = document.getElementById('dominioOverlay');
   if (overlay) overlay.style.display = 'none';
@@ -1246,11 +1268,10 @@ function escaparDominio() {
 
 function perderDominio() {
   dominioActivo = false;
-  dominioEnemigos.forEach(el => el.remove());
+  dominioEnemigos.forEach(el => { if (el._moverTimer) clearTimeout(el._moverTimer); el.remove(); });
   dominioEnemigos = [];
   const overlay = document.getElementById('dominioOverlay');
   if (overlay) overlay.style.display = 'none';
-  // Terminar partida
   showDamageText('💀 El dominio te consumió', '#ff0000');
   setTimeout(() => goToMenu(), 2500);
 }
